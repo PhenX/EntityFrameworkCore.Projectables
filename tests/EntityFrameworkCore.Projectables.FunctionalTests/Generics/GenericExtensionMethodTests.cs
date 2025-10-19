@@ -10,8 +10,7 @@ using Xunit;
 
 namespace EntityFrameworkCore.Projectables.FunctionalTests.Generics
 {
-    [UsesVerify]
-    public class GenericFunctionTests
+        public class GenericFunctionTests
     {
         [Fact]
         public Task DefaultIfIdIsNegative()

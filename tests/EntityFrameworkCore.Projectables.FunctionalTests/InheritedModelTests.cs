@@ -17,8 +17,7 @@ using Xunit;
 namespace EntityFrameworkCore.Projectables.FunctionalTests
 {
 
-    [UsesVerify]
-    public class InheritedModelTests
+        public class InheritedModelTests
     {
         public interface IBaseProvider<TBase>
         {

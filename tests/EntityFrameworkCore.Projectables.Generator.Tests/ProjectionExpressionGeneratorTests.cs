@@ -13,7 +13,6 @@ using Xunit.Abstractions;
 
 namespace EntityFrameworkCore.Projectables.Generator.Tests
 {
-    [UsesVerify]
     public class ProjectionExpressionGeneratorTests
     {
         readonly ITestOutputHelper _testOutputHelper;

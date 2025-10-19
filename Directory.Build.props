@@ -2,10 +2,11 @@
 
   <PropertyGroup>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <LangVersion>11.0</LangVersion>
+    <LangVersion>12</LangVersion>
     <Nullable>enable</Nullable>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <NoWarn>CS1591</NoWarn>
+    <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -23,14 +24,19 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <TargetFrameworkVersion>net7.0;net6.0</TargetFrameworkVersion>
-    <MicrosoftExtensionsVersion>6.0.0</MicrosoftExtensionsVersion>
-    <EFCoreVersion>6.0.0</EFCoreVersion>
-    <TestEFCoreVersion>$(EFCoreVersion)</TestEFCoreVersion>
+    <EFCoreVersion>8.0.0</EFCoreVersion>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net7.0'">
-    <EFCoreVersion>7.0.0</EFCoreVersion>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net9.0'">
+    <EFCoreVersion>9.0.0</EFCoreVersion>
+  </PropertyGroup>
+    
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <EFCoreVersion>10.0.0</EFCoreVersion>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <MicrosoftPackagesVersion>$(EFCoreVersion)</MicrosoftPackagesVersion>
     <TestEFCoreVersion>$(EFCoreVersion)</TestEFCoreVersion>
   </PropertyGroup>
 

@@ -7,8 +7,7 @@ using Xunit;
 
 namespace EntityFrameworkCore.Projectables.FunctionalTests
 {
-    [UsesVerify]
-    public class QueryRootTests
+        public class QueryRootTests
     {
         public record Entity
         {

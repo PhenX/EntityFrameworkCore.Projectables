@@ -9,8 +9,7 @@ using Xunit;
 
 namespace EntityFrameworkCore.Projectables.FunctionalTests.NullConditionals
 {
-    [UsesVerify]
-    public class RewriteNullConditionalRewriteTests
+        public class RewriteNullConditionalRewriteTests
     {
         [Fact]
         public Task SimpleMemberExpression()

@@ -10,8 +10,7 @@ using Xunit;
 
 namespace EntityFrameworkCore.Projectables.FunctionalTests
 {
-    [UsesVerify]
-    public class PrivateProjectables
+        public class PrivateProjectables
     {
         public record Entity
         {

@@ -16,8 +16,7 @@ using Xunit;
 namespace EntityFrameworkCore.Projectables.FunctionalTests
 {
 
-    [UsesVerify]
-    public class ComplexModelTests
+        public class ComplexModelTests
     {
         public class User
         {

@@ -13,8 +13,7 @@ using Xunit;
 
 namespace EntityFrameworkCore.Projectables.FunctionalTests
 {
-    [UsesVerify]
-    public class StaticMembersTests
+        public class StaticMembersTests
     {
         public static class Constants
         {

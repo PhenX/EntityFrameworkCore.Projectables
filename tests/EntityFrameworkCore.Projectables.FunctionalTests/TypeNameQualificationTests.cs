@@ -10,8 +10,7 @@ using Xunit;
 
 namespace EntityFrameworkCore.Projectables.FunctionalTests
 {
-    [UsesVerify]
-    public class TypeNameQualificationTests
+        public class TypeNameQualificationTests
     {
         public record Entity
         {

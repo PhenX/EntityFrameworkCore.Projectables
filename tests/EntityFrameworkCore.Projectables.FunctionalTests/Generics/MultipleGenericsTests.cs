@@ -10,8 +10,7 @@ using Xunit;
 
 namespace EntityFrameworkCore.Projectables.FunctionalTests.Generics
 {
-    [UsesVerify]
-    public class MultipleGenericsTests
+        public class MultipleGenericsTests
     {
         [Projectable]
         public static object? Coalesce<T1, T2>(T1? t1, T2 t2)
