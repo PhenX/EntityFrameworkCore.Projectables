@@ -63,13 +63,27 @@ namespace EntityFrameworkCore.Projectables.Services
             {
                 var declaringType = projectableMemberInfo.DeclaringType ?? throw new InvalidOperationException("Expected a valid type here");
                 
+                // Keep track of the original declaring type's generic arguments for later use
+                var originalDeclaringType = declaringType;
+                
+                // For generic types, use the generic type definition to match the generated name
+                // which is based on the open generic type
+                if (declaringType.IsGenericType && !declaringType.IsGenericTypeDefinition)
+                {
+                    declaringType = declaringType.GetGenericTypeDefinition();
+                }
+                
                 // Get parameter types for method overload disambiguation
                 // Use the same format as Roslyn's SymbolDisplayFormat.FullyQualifiedFormat
                 // which uses C# keywords for primitive types (int, string, etc.)
                 string[]? parameterTypeNames = null;
                 if (projectableMemberInfo is MethodInfo method)
                 {
-                    parameterTypeNames = method.GetParameters()
+                    // For generic methods, use the generic definition to get parameter types
+                    // This ensures type parameters like TEntity are used instead of concrete types
+                    var methodToInspect = method.IsGenericMethod ? method.GetGenericMethodDefinition() : method;
+                    
+                    parameterTypeNames = methodToInspect.GetParameters()
                         .Select(p => GetFullTypeName(p.ParameterType))
                         .ToArray();
                 }
@@ -82,7 +96,7 @@ namespace EntityFrameworkCore.Projectables.Services
                 {
                     if (expressionFactoryType.IsGenericTypeDefinition)
                     {
-                        expressionFactoryType = expressionFactoryType.MakeGenericType(declaringType.GenericTypeArguments);
+                        expressionFactoryType = expressionFactoryType.MakeGenericType(originalDeclaringType.GenericTypeArguments);
                     }
 
                     var expressionFactoryMethod = expressionFactoryType.GetMethod("Expression", BindingFlags.Static | BindingFlags.NonPublic);
@@ -108,6 +122,12 @@ namespace EntityFrameworkCore.Projectables.Services
             
             static string GetFullTypeName(Type type)
             {
+                // Handle generic type parameters (e.g., T, TEntity)
+                if (type.IsGenericParameter)
+                {
+                    return type.Name;
+                }
+                
                 // Handle array types
                 if (type.IsArray)
                 {
@@ -153,7 +173,8 @@ namespace EntityFrameworkCore.Projectables.Services
                 
                 if (type.FullName != null)
                 {
-                    return type.FullName;
+                    // Replace + with . for nested types to match Roslyn's format
+                    return type.FullName.Replace('+', '.');
                 }
                 
                 return type.Name;

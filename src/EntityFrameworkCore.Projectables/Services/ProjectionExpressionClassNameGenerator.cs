@@ -67,12 +67,6 @@ namespace EntityFrameworkCore.Projectables.Services
             }
             stringBuilder.Append(memberName);
 
-            if (arity > 0)
-            {
-                stringBuilder.Append('`');
-                stringBuilder.Append(arity);
-            }
-
             // Add parameter types to make method overloads unique
             if (parameterTypeNames is not null)
             {
@@ -98,6 +92,14 @@ namespace EntityFrameworkCore.Projectables.Services
                     stringBuilder.Append(sanitizedTypeName);
                     parameterIndex++;
                 }
+            }
+
+            // Add generic arity at the very end (after parameter types)
+            // This matches how the CLR names generic types
+            if (arity > 0)
+            {
+                stringBuilder.Append('`');
+                stringBuilder.Append(arity);
             }
 
             return stringBuilder.ToString();
