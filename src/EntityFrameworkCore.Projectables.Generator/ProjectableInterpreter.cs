@@ -118,6 +118,8 @@ namespace EntityFrameworkCore.Projectables.Generator
             var expressionSyntaxRewriter = new ExpressionSyntaxRewriter(memberSymbol.ContainingType, nullConditionalRewriteSupport, semanticModel, context);
             var declarationSyntaxRewriter = new DeclarationSyntaxRewriter(semanticModel);
 
+            var methodSymbol = memberSymbol as IMethodSymbol;
+
             var descriptor = new ProjectableDescriptor {
 
                 UsingDirectives = member.SyntaxTree.GetRoot().DescendantNodes().OfType<UsingDirectiveSyntax>(),                    
@@ -127,6 +129,17 @@ namespace EntityFrameworkCore.Projectables.Generator
                 NestedInClassNames = GetNestedInClassPath(memberSymbol.ContainingType),
                 ParametersList = SyntaxFactory.ParameterList()
             };
+
+            // Collect parameter type names for method overload disambiguation
+            if (methodSymbol is not null)
+            {
+                var parameterTypeNames = new List<string>();
+                foreach (var parameter in methodSymbol.Parameters)
+                {
+                    parameterTypeNames.Add(parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+                }
+                descriptor.ParameterTypeNames = parameterTypeNames;
+            }
 
             if (memberSymbol.ContainingType is INamedTypeSymbol { IsGenericType: true } containingNamedType)
             {
@@ -195,8 +208,6 @@ namespace EntityFrameworkCore.Projectables.Generator
                     )
                 );
             }
-
-            var methodSymbol = memberSymbol as IMethodSymbol;
 
             if (methodSymbol is { IsExtensionMethod: true })
             {
