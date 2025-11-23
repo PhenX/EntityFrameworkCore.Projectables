@@ -132,8 +132,14 @@ namespace EntityFrameworkCore.Projectables.Services
                 if (type.IsArray)
                 {
                     var elementType = type.GetElementType();
+                    if (elementType == null)
+                    {
+                        // Fallback for edge cases where GetElementType() might return null
+                        return type.Name;
+                    }
+                    
                     var rank = type.GetArrayRank();
-                    var elementTypeName = GetFullTypeName(elementType!);
+                    var elementTypeName = GetFullTypeName(elementType);
                     
                     if (rank == 1)
                     {

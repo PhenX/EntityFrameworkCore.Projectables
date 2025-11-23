@@ -133,12 +133,9 @@ namespace EntityFrameworkCore.Projectables.Generator
             // Collect parameter type names for method overload disambiguation
             if (methodSymbol is not null)
             {
-                var parameterTypeNames = new List<string>();
-                foreach (var parameter in methodSymbol.Parameters)
-                {
-                    parameterTypeNames.Add(parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
-                }
-                descriptor.ParameterTypeNames = parameterTypeNames;
+                descriptor.ParameterTypeNames = methodSymbol.Parameters
+                    .Select(p => p.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
+                    .ToList();
             }
 
             if (memberSymbol.ContainingType is INamedTypeSymbol { IsGenericType: true } containingNamedType)
