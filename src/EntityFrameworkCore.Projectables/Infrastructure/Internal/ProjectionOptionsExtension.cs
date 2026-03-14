@@ -41,6 +41,9 @@ namespace EntityFrameworkCore.Projectables.Infrastructure.Internal
             // Register a convention that will ignore properties marked with the ProjectableAttribute
             services.AddScoped<IConventionSetPlugin, ProjectablePropertiesNotMappedConventionPlugin>();
 
+            // Register the translator plugin so that [SqlExpression]-decorated methods are translated
+            services.AddScoped<IMethodCallTranslatorPlugin, SqlExpressionMethodCallTranslatorPlugin>();
+
             static object CreateTargetInstance(IServiceProvider services, ServiceDescriptor descriptor)
             {
                 if (descriptor.ImplementationInstance is not null)

@@ -1,0 +1,3 @@
+﻿SELECT [e].[Id], [e].[Name], [e].[NickName]
+FROM [Entity] AS [e]
+WHERE UPPER([e].[Name]) = N'ALICE'
