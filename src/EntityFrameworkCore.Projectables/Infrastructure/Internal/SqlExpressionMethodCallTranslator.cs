@@ -18,7 +18,7 @@ namespace EntityFrameworkCore.Projectables.Infrastructure.Internal
     {
         // Matches patterns like: FUNCNAME({0}, {1}, ...)
         private static readonly Regex FunctionCallPattern =
-            new Regex(@"^(\w[\w.]*)(\s*)\(\s*(\{\d+\}(\s*,\s*\{\d+\})*)\s*\)$", RegexOptions.Compiled);
+            new Regex(@"^(\w[\w.]*)(?:\s*)\(\s*(\{\d+\}(?:\s*,\s*\{\d+\})*)\s*\)$", RegexOptions.Compiled);
 
         // Matches individual argument placeholders like {0}, {1}, ...
         private static readonly Regex ArgumentPlaceholderPattern =
@@ -55,12 +55,21 @@ namespace EntityFrameworkCore.Projectables.Infrastructure.Internal
                 return null;
 
             var functionName = match.Groups[1].Value;
-            var argSection = match.Groups[3].Value;
+            var argSection = match.Groups[2].Value;
 
             var argMatches = ArgumentPlaceholderPattern.Matches(argSection);
-            var orderedArgs = argMatches
-                .Select(m => arguments[int.Parse(m.Groups[1].Value)])
-                .ToArray();
+            var orderedArgs = new SqlExpression[argMatches.Count];
+            for (var i = 0; i < argMatches.Count; i++)
+            {
+                var index = int.Parse(argMatches[i].Groups[1].Value);
+                if (index >= arguments.Count)
+                {
+                    throw new InvalidOperationException(
+                        $"SQL template '{template}' references argument {{index}} but the method only has {arguments.Count} argument(s).");
+                }
+
+                orderedArgs[i] = arguments[index];
+            }
 
             return _sqlExpressionFactory.Function(
                 functionName,
