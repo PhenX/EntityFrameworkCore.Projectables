@@ -25,10 +25,12 @@ namespace EntityFrameworkCore.Projectables.Infrastructure.Internal
             new Regex(@"\{(\d+)\}", RegexOptions.Compiled);
 
         private readonly ISqlExpressionFactory _sqlExpressionFactory;
+        private readonly string? _providerName;
 
-        public SqlExpressionMethodCallTranslator(ISqlExpressionFactory sqlExpressionFactory)
+        public SqlExpressionMethodCallTranslator(ISqlExpressionFactory sqlExpressionFactory, string? providerName = null)
         {
             _sqlExpressionFactory = sqlExpressionFactory;
+            _providerName = providerName;
         }
 
         /// <inheritdoc />
@@ -38,11 +40,26 @@ namespace EntityFrameworkCore.Projectables.Infrastructure.Internal
             IReadOnlyList<SqlExpression> arguments,
             IDiagnosticsLogger<DbLoggerCategory.Query> logger)
         {
-            var sqlExpressionAttr = method.GetCustomAttribute<SqlExpressionAttribute>();
-            if (sqlExpressionAttr is null)
+            var sqlExpressionAttrs = method.GetCustomAttributes<SqlExpressionAttribute>().ToArray();
+            if (sqlExpressionAttrs.Length == 0)
                 return null;
 
-            return TranslateTemplate(sqlExpressionAttr.Sql, arguments, method.ReturnType);
+            // Prefer an attribute whose Configuration matches the current provider name.
+            SqlExpressionAttribute? selectedAttr = null;
+            if (_providerName != null)
+            {
+                selectedAttr = sqlExpressionAttrs.FirstOrDefault(a =>
+                    a.Configuration != null &&
+                    _providerName.Contains(a.Configuration, StringComparison.OrdinalIgnoreCase));
+            }
+
+            // Fall back to an attribute without a Configuration (provider-agnostic).
+            selectedAttr ??= sqlExpressionAttrs.FirstOrDefault(a => a.Configuration is null);
+
+            if (selectedAttr is null)
+                return null;
+
+            return TranslateTemplate(selectedAttr.Sql, arguments, method.ReturnType);
         }
 
         private SqlExpression? TranslateTemplate(

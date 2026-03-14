@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
 
 namespace EntityFrameworkCore.Projectables.Infrastructure.Internal
@@ -10,11 +11,12 @@ namespace EntityFrameworkCore.Projectables.Infrastructure.Internal
     /// </summary>
     public class SqlExpressionMethodCallTranslatorPlugin : IMethodCallTranslatorPlugin
     {
-        public SqlExpressionMethodCallTranslatorPlugin(ISqlExpressionFactory sqlExpressionFactory)
+        public SqlExpressionMethodCallTranslatorPlugin(ISqlExpressionFactory sqlExpressionFactory, ICurrentDbContext currentDbContext)
         {
+            var providerName = currentDbContext.Context.Database.ProviderName;
             Translators = new IMethodCallTranslator[]
             {
-                new SqlExpressionMethodCallTranslator(sqlExpressionFactory)
+                new SqlExpressionMethodCallTranslator(sqlExpressionFactory, providerName)
             };
         }
 
