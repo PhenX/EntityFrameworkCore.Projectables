@@ -25,5 +25,13 @@ namespace EntityFrameworkCore.Projectables.Generator
             DiagnosticSeverity.Error,
             isEnabledByDefault: true);
 
+        public static readonly DiagnosticDescriptor SqlExpressionArgumentCountMismatch = new DiagnosticDescriptor(
+            id: "EFP0003",
+            title: "SqlExpression template references out-of-range argument",
+            messageFormat: "SQL template references argument {{{0}}} but the method only has {1} parameter(s). Valid argument indices range from {{0}} to {{{2}}}.",
+            category: "Design",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
     }
 }

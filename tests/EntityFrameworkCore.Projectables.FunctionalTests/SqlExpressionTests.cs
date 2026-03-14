@@ -8,6 +8,21 @@ using Xunit;
 
 namespace EntityFrameworkCore.Projectables.FunctionalTests
 {
+    /// <summary>
+    /// Extension-method-style SQL functions – same SQL templates as <see cref="SqlExpressionTests.Functions"/>,
+    /// but declared with a <c>this</c> parameter so they can be called with instance syntax.
+    /// Must be a top-level (non-nested) static class because C# requires extension methods there.
+    /// </summary>
+    public static class SqlExtensionFunctions
+    {
+        [SqlExpression("UPPER({0})")]
+        public static string Upper(this string value) => throw new NotImplementedException();
+
+        [SqlExpression("STRFTIME('%Y', {0})", Configuration = "Sqlite")]
+        [SqlExpression("YEAR({0})", Configuration = "SqlServer")]
+        public static int Year(this DateTime date) => throw new NotImplementedException();
+    }
+
     [UsesVerify]
     public class SqlExpressionTests
     {
@@ -82,6 +97,50 @@ namespace EntityFrameworkCore.Projectables.FunctionalTests
 
             var query = dbContext.Set<DateEntity>()
                 .Select(x => Functions.YearWithFallback(x.CreatedAt));
+
+            return Verifier.Verify(query.ToQueryString());
+        }
+
+        /// <summary>
+        /// Verifies that <see cref="SqlExtensionFunctions.Upper"/> is translated correctly when
+        /// called with extension-method syntax (<c>x.Name.Upper()</c>).
+        /// </summary>
+        [Fact]
+        public Task WhereWithExtensionMethodSqlExpression()
+        {
+            using var dbContext = new SampleDbContext<Entity>();
+
+            var query = dbContext.Set<Entity>()
+                .Where(x => x.Name.Upper() == "ALICE");
+
+            return Verifier.Verify(query.ToQueryString());
+        }
+
+        /// <summary>
+        /// Verifies that a provider-specific template (<c>STRFTIME('%Y', {0})</c>) with a
+        /// literal SQL fragment mixed into the argument list is translated correctly on SQLite.
+        /// </summary>
+        [Fact]
+        public Task SelectWithStrftimeOnSqlite()
+        {
+            using var dbContext = new SqliteSampleDbContext<DateEntity>();
+
+            var query = dbContext.Set<DateEntity>()
+                .Select(x => Functions.Year(x.CreatedAt));
+
+            return Verifier.Verify(query.ToQueryString());
+        }
+
+        /// <summary>
+        /// Verifies the same scenario via extension-method syntax on SQLite.
+        /// </summary>
+        [Fact]
+        public Task SelectWithExtensionMethodStrftimeOnSqlite()
+        {
+            using var dbContext = new SqliteSampleDbContext<DateEntity>();
+
+            var query = dbContext.Set<DateEntity>()
+                .Select(x => x.CreatedAt.Year());
 
             return Verifier.Verify(query.ToQueryString());
         }

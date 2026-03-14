@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EntityFrameworkCore.Projectables
 {
@@ -32,7 +33,7 @@ namespace EntityFrameworkCore.Projectables
         /// <param name="sql">
         /// The SQL template. Use {0}, {1}, etc. as positional placeholders for method arguments.
         /// </param>
-        public SqlExpressionAttribute(string sql)
+        public SqlExpressionAttribute([StringSyntax("sql")] string sql)
         {
             Sql = sql;
         }
