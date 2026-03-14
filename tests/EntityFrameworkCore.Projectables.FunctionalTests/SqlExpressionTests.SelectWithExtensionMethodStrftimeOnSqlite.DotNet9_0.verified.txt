@@ -1,0 +1,2 @@
+﻿SELECT STRFTIME('%Y', "d"."CreatedAt")
+FROM "DateEntity" AS "d"

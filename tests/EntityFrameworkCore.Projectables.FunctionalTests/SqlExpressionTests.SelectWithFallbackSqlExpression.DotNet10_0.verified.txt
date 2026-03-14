@@ -1,0 +1,2 @@
+﻿SELECT YEAR([d].[CreatedAt])
+FROM [DateEntity] AS [d]
