@@ -1,5 +1,6 @@
 ﻿using EntityFrameworkCore.Projectables.Infrastructure;
 using EntityFrameworkCore.Projectables.Infrastructure.Internal;
+using EntityFrameworkCore.Projectables.Query;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata.Conventions;
 using Microsoft.EntityFrameworkCore.Metadata.Conventions.Infrastructure;
@@ -56,6 +57,11 @@ namespace EntityFrameworkCore.Projectables.Infrastructure.Internal
 
             // Custom convention to handle global query filters, etc
             services.AddScoped<IConventionSetPlugin, CustomConventionSetPlugin>();
+
+            // Register the CTE-aware SQL generator factory for deduplicating duplicate
+            // SelectExpression subtrees produced when local variables in block-bodied
+            // projectable methods are referenced more than once.
+            services.Replace(ServiceDescriptor.Scoped<IQuerySqlGeneratorFactory, CteAwareQuerySqlGeneratorFactory>());
 
             if (_compatibilityMode is CompatibilityMode.Full)
             {

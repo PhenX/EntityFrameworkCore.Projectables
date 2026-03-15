@@ -14,6 +14,7 @@ internal class BlockStatementConverter
     private readonly SourceProductionContext _context;
     private readonly ExpressionSyntaxRewriter _expressionRewriter;
     private readonly Dictionary<string, ExpressionSyntax> _localVariables = new();
+    private readonly Dictionary<string, int> _localVariableReferenceCount = new();
 
     public BlockStatementConverter(SourceProductionContext context, ExpressionSyntaxRewriter expressionRewriter)
     {
@@ -346,9 +347,12 @@ internal class BlockStatementConverter
 
     /// <summary>
     /// Replaces references to local variables in the given expression with their initializer expressions.
+    /// Also tracks how many times each variable is referenced via <see cref="_localVariableReferenceCount"/>.
+    /// Variables referenced more than once in the final expression are candidates for CTE-based
+    /// deduplication at the SQL generation layer (see <c>CteDeduplicatingRewriter</c>).
     /// </summary>
     private ExpressionSyntax ReplaceLocalVariables(ExpressionSyntax expression)
-        => (ExpressionSyntax)new LocalVariableReplacer(_localVariables).Visit(expression);
+        => (ExpressionSyntax)new LocalVariableReplacer(_localVariables, _localVariableReferenceCount).Visit(expression);
 
     private static LiteralExpressionSyntax DefaultLiteral()
         => SyntaxFactory.LiteralExpression(
@@ -450,16 +454,21 @@ internal class BlockStatementConverter
     private class LocalVariableReplacer : CSharpSyntaxRewriter
     {
         private readonly Dictionary<string, ExpressionSyntax> _localVariables;
+        private readonly Dictionary<string, int> _referenceCount;
 
-        public LocalVariableReplacer(Dictionary<string, ExpressionSyntax> localVariables)
+        public LocalVariableReplacer(
+            Dictionary<string, ExpressionSyntax> localVariables,
+            Dictionary<string, int> referenceCount)
         {
             _localVariables = localVariables;
+            _referenceCount = referenceCount;
         }
 
         public override SyntaxNode? VisitIdentifierName(IdentifierNameSyntax node)
         {
             if (_localVariables.TryGetValue(node.Identifier.Text, out var replacement))
             {
+                _referenceCount[node.Identifier.Text] = _referenceCount.TryGetValue(node.Identifier.Text, out var count) ? count + 1 : 1;
                 return SyntaxFactory.ParenthesizedExpression(replacement.WithoutTrivia())
                     .WithTriviaFrom(node);
             }
