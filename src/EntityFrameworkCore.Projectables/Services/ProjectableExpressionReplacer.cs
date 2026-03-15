@@ -30,14 +30,6 @@ namespace EntityFrameworkCore.Projectables.Services
             ((MethodCallExpression)((Expression<Func<IQueryable<object>, IQueryable<object>>>)
                 (q => q.Where(x => true))).Body).Method.GetGenericMethodDefinition();
 
-        // Variable.Wrap<T>(string, T) generic method definition — used to strip the marker
-        // injected by the source generator for reused local variables in block-bodied projectable
-        // methods. At this stage in the pipeline the marker is peeled away (identity behaviour);
-        // future implementations may use it to emit SQL CTEs.
-        private readonly static MethodInfo _variableWrapMethod =
-            ((MethodCallExpression)((Expression<Func<int, int>>)(v => Variable.Wrap("x", v))).Body)
-                .Method.GetGenericMethodDefinition();
-
         // Static caches — keyed by CLR type, shared across all instances for the AppDomain lifetime.
         // ConditionalWeakTable uses "ephemeron" semantics: the Type key is not kept alive by the
         // cache entry, so types from collectible AssemblyLoadContexts can still be unloaded.
@@ -153,17 +145,10 @@ namespace EntityFrameworkCore.Projectables.Services
 
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {
-            // Strip Variable.Wrap("name", value) → value.
-            // The generator emits Variable.Wrap for reused local variables as a CTE marker.
-            // We peel it away here so EF Core never sees the call; the SQL shape is unchanged
-            // for now (both occurrences are inlined). Future work: use the marker to create CTEs.
-            if (node.Method.IsGenericMethod &&
-                node.Method.GetGenericMethodDefinition() == _variableWrapMethod)
-            {
-                return Visit(node.Arguments[1]);
-            }
-
-            // Replace MethodGroup arguments with their reflected expressions.
+            // Variable.Wrap("name", value) is now handled by VariableWrapTranslatorPlugin during
+            // EF Core's SQL translation phase, which converts it to a VariableWrapSqlExpression.
+            // We no longer strip it here so EF Core sees the call and can translate it properly.
+            // (Single-use wraps are inlined; multi-use wraps get a CROSS APPLY on net10.0+.)
             // No-alloc fast-path: scan args without allocating; only copy the array and call
             // Update() when a replacement is actually found (method-group arguments are rare).
             Expression[]? updatedArgs = null;

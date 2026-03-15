@@ -42,6 +42,10 @@ namespace EntityFrameworkCore.Projectables.Infrastructure.Internal
             // Register a convention that will ignore properties marked with the ProjectableAttribute
             services.AddScoped<IConventionSetPlugin, ProjectablePropertiesNotMappedConventionPlugin>();
 
+            // Translate Variable.Wrap(name, expr) calls to VariableWrapSqlExpression so the
+            // CteAwareQuerySqlGenerator can decide whether to inline or CROSS-APPLY them.
+            services.AddSingleton<IMethodCallTranslatorPlugin, VariableWrapTranslatorPlugin>();
+
             static object CreateTargetInstance(IServiceProvider services, ServiceDescriptor descriptor)
             {
                 if (descriptor.ImplementationInstance is not null)
@@ -62,6 +66,22 @@ namespace EntityFrameworkCore.Projectables.Infrastructure.Internal
             // SelectExpression subtrees produced when local variables in block-bodied
             // projectable methods are referenced more than once.
             services.Replace(ServiceDescriptor.Scoped<IQuerySqlGeneratorFactory, CteAwareQuerySqlGeneratorFactory>());
+
+            // Wrap the query translation postprocessor to handle VariableWrapSqlExpression before
+            // EF Core's SqlNullabilityProcessor encounters it.
+            var postprocessorDescriptor = services.FirstOrDefault(x => x.ServiceType == typeof(IQueryTranslationPostprocessorFactory));
+            if (postprocessorDescriptor is not null)
+            {
+                var decoratorObjectFactory = ActivatorUtilities.CreateFactory(
+                    typeof(VariableWrapQueryTranslationPostprocessorFactory),
+                    new[] { postprocessorDescriptor.ServiceType });
+
+                services.Replace(ServiceDescriptor.Describe(
+                    postprocessorDescriptor.ServiceType,
+                    serviceProvider => decoratorObjectFactory(serviceProvider, new[] { CreateTargetInstance(serviceProvider, postprocessorDescriptor) }),
+                    postprocessorDescriptor.Lifetime
+                ));
+            }
 
             if (_compatibilityMode is CompatibilityMode.Full)
             {
