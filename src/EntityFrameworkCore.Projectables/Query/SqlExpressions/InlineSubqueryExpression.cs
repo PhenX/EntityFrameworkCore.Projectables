@@ -1,4 +1,3 @@
-#if !NET8_0 && !NET9_0
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Query;
@@ -29,6 +28,20 @@ public sealed class InlineSubqueryExpression : TableExpressionBase
         ColumnName = columnName;
     }
 
+    // Secondary constructor used when annotations are propagated (e.g. during cloning).
+    // The annotation parameter type differs between EF Core 8 and 9+.
+#if NET8_0
+    private InlineSubqueryExpression(
+        string alias,
+        SqlExpression inner,
+        string columnName,
+        IEnumerable<IAnnotation> annotations)
+        : base(alias, annotations)
+    {
+        Inner = inner;
+        ColumnName = columnName;
+    }
+#else
     private InlineSubqueryExpression(
         string alias,
         SqlExpression inner,
@@ -39,6 +52,7 @@ public sealed class InlineSubqueryExpression : TableExpressionBase
         Inner = inner;
         ColumnName = columnName;
     }
+#endif
 
     /// <summary>The expression computed inside the inline subquery.</summary>
     public SqlExpression Inner { get; }
@@ -52,10 +66,17 @@ public sealed class InlineSubqueryExpression : TableExpressionBase
         var newInner = (SqlExpression)visitor.Visit(Inner);
         return ReferenceEquals(newInner, Inner)
             ? this
-            : new InlineSubqueryExpression(Alias!, newInner, ColumnName,
-                GetAnnotations().ToDictionary(a => a.Name, a => a));
+            : new InlineSubqueryExpression(Alias!, newInner, ColumnName);
     }
 
+    // EF Core 8 uses CreateWithAnnotations (IEnumerable<IAnnotation>) as the abstract method
+    // for copying an expression with a new annotation set.  EF Core 9+ uses an immutable Clone /
+    // WithAlias / WithAnnotations API instead.
+#if NET8_0
+    /// <inheritdoc/>
+    protected override TableExpressionBase CreateWithAnnotations(IEnumerable<IAnnotation> annotations)
+        => new InlineSubqueryExpression(Alias!, Inner, ColumnName, annotations);
+#else
     /// <inheritdoc/>
     public override TableExpressionBase Clone(string? alias, ExpressionVisitor cloningExpressionVisitor)
         => new InlineSubqueryExpression(
@@ -70,17 +91,18 @@ public sealed class InlineSubqueryExpression : TableExpressionBase
             GetAnnotations().ToDictionary(a => a.Name, a => a));
 
     /// <inheritdoc/>
-    protected override TableExpressionBase WithAnnotations(IReadOnlyDictionary<string, IAnnotation> annotations)
-        => new InlineSubqueryExpression(Alias!, Inner, ColumnName, annotations);
-
-    /// <inheritdoc/>
     public override Expression Quote()
         => throw new NotSupportedException($"{nameof(InlineSubqueryExpression)} does not support pre-compiled queries.");
 
     /// <inheritdoc/>
+    protected override TableExpressionBase WithAnnotations(IReadOnlyDictionary<string, IAnnotation> annotations)
+        => new InlineSubqueryExpression(Alias!, Inner, ColumnName, annotations);
+#endif
+
+    /// <inheritdoc/>
     protected override void Print(ExpressionPrinter expressionPrinter)
     {
-        expressionPrinter.Append($"(SELECT ");
+        expressionPrinter.Append("(SELECT ");
         expressionPrinter.Visit(Inner);
         expressionPrinter.Append($" AS [{ColumnName}]) AS [{Alias}]");
     }
@@ -95,4 +117,3 @@ public sealed class InlineSubqueryExpression : TableExpressionBase
     /// <inheritdoc/>
     public override int GetHashCode() => HashCode.Combine(Alias, ColumnName, Inner);
 }
-#endif

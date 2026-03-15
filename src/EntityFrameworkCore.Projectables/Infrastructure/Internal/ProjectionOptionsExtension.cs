@@ -82,6 +82,27 @@ namespace EntityFrameworkCore.Projectables.Infrastructure.Internal
                 ));
             }
 
+#if NET8_0 || NET9_0
+            // In EF Core 8/9 the execution-time SqlNullabilityProcessor (run inside
+            // RelationalParameterBasedSqlProcessor.Optimize) throws on unknown
+            // TableExpressionBase subtypes — including our InlineSubqueryExpression.
+            // ProjectablesParameterBasedSqlProcessorFactory decorates the provider's factory
+            // and temporarily hides InlineSubqueryExpression tables around the nullability pass.
+            var paramSqlDescriptor = services.FirstOrDefault(x => x.ServiceType == typeof(IRelationalParameterBasedSqlProcessorFactory));
+            if (paramSqlDescriptor is not null)
+            {
+                var paramFactory = ActivatorUtilities.CreateFactory(
+                    typeof(ProjectablesParameterBasedSqlProcessorFactory),
+                    new[] { paramSqlDescriptor.ServiceType });
+
+                services.Replace(ServiceDescriptor.Describe(
+                    paramSqlDescriptor.ServiceType,
+                    sp => paramFactory(sp, new[] { CreateTargetInstance(sp, paramSqlDescriptor) }),
+                    paramSqlDescriptor.Lifetime
+                ));
+            }
+#endif
+
             if (_compatibilityMode is CompatibilityMode.Full)
             {
                 var targetDescriptor = services.FirstOrDefault(x => x.ServiceType == typeof(IQueryCompiler));

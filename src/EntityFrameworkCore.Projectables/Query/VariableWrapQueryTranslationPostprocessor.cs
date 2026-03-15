@@ -10,10 +10,10 @@ namespace EntityFrameworkCore.Projectables.Query;
 /// factory and inserts a <see cref="VariableWrapQueryTranslationPostprocessor"/> step.
 /// <para>
 /// This postprocessor runs <em>before</em> the relational nullability processor so that
-/// <see cref="VariableWrapSqlExpression"/> nodes — which EF Core's nullability processor does
-/// not understand — are either hoisted into <c>CROSS APPLY</c> / <c>CROSS JOIN LATERAL</c>
-/// subqueries (on .NET 10 / EF Core 10+) or lowered to their inner expressions (on earlier
-/// versions) before the nullability processor encounters them.
+/// <see cref="VariableWrapSqlExpression"/> nodes are hoisted into <c>CROSS APPLY</c> /
+/// <c>CROSS JOIN LATERAL</c> subqueries before the translation-time nullability processor
+/// encounters them.  Multi-use wraps are replaced with <see cref="ColumnExpression"/>
+/// references; single-use wraps are lowered to their inner expression.
 /// </para>
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "EF1001:Internal EF Core API usage.", Justification = "Needed")]
@@ -32,15 +32,8 @@ internal sealed class VariableWrapQueryTranslationPostprocessorFactory(
 
 /// <summary>
 /// Processes <see cref="VariableWrapSqlExpression"/> nodes in the SQL expression tree before
-/// delegating to the inner postprocessor.
-/// <list type="bullet">
-///   <item>On .NET 10 / EF Core 10+: Replaces multi-use <see cref="VariableWrapSqlExpression"/>
-///         groups with <c>CROSS APPLY</c> (SQL Server) or <c>CROSS JOIN LATERAL</c> (PostgreSQL)
-///         inline subquery table sources so each local variable expression is computed exactly
-///         once per row.</item>
-///   <item>On earlier versions: Lowers every <see cref="VariableWrapSqlExpression"/> to its
-///         plain inner expression (identity semantics, no deduplication).</item>
-/// </list>
+/// delegating to the inner postprocessor.  Multi-use wraps become <c>CROSS APPLY</c> /
+/// <c>CROSS JOIN LATERAL</c> inline subquery table sources.
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "EF1001:Internal EF Core API usage.", Justification = "Needed")]
 internal sealed class VariableWrapQueryTranslationPostprocessor(
@@ -52,9 +45,16 @@ internal sealed class VariableWrapQueryTranslationPostprocessor(
     /// <inheritdoc/>
     public override Expression Process(Expression query)
     {
-        // Apply Variable.Wrap transformation before the provider's postprocessor (which
-        // eventually runs SqlNullabilityProcessor — an EF Core internal processor that throws
-        // on unknown custom SQL expressions).
+        // Transform Variable.Wrap nodes BEFORE the provider's postprocessor runs the
+        // translation-time SqlNullabilityProcessor.  The SQL Server provider overrides
+        // VisitCustomSqlExpression to throw on unknown nodes, so both
+        // VariableWrapSqlExpression (SqlExpression) and InlineSubqueryExpression
+        // (TableExpressionBase) must be gone before that processor runs.
+        //
+        // For EF Core 8/9, a second nullability pass runs at execution time inside
+        // RelationalParameterBasedSqlProcessor.Optimize.  ProjectablesParameterBasedSqlProcessorFactory
+        // (registered in the DI container for EF 8/9) intercepts that pass and temporarily
+        // hides InlineSubqueryExpression tables so they never reach the processor.
         query = TransformVariableWraps(query);
         return inner.Process(query);
     }
@@ -65,26 +65,9 @@ internal sealed class VariableWrapQueryTranslationPostprocessor(
             || shaped.QueryExpression is not SelectExpression selectExpression)
             return query;
 
-#if !NET8_0 && !NET9_0
         var transformed = ProjectablesQuerySqlGenerator.TransformVariableWrapsOnSelectExpression(selectExpression);
         return ReferenceEquals(transformed, selectExpression)
             ? query
             : shaped.UpdateQueryExpression(transformed);
-#else
-        // Lower Variable.Wrap → inner expression so the nullability processor is unaffected.
-        var stripped = (SelectExpression)new VariableWrapStripper().Visit(selectExpression);
-        return ReferenceEquals(stripped, selectExpression) ? query : shaped.UpdateQueryExpression(stripped);
-#endif
     }
-
-#if NET8_0 || NET9_0
-    /// <summary>Removes <see cref="VariableWrapSqlExpression"/> by replacing each with its inner expression.</summary>
-    private sealed class VariableWrapStripper : ExpressionVisitor
-    {
-        protected override Expression VisitExtension(Expression node)
-            => node is VariableWrapSqlExpression wrap
-                ? Visit(wrap.Inner)
-                : base.VisitExtension(node);
-    }
-#endif
 }

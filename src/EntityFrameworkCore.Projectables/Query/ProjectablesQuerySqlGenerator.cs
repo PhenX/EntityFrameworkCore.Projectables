@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Reflection;
 using EntityFrameworkCore.Projectables.Query.SqlExpressions;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
@@ -33,28 +34,44 @@ public class ProjectablesQuerySqlGenerator : QuerySqlGenerator
         switch (expression)
         {
             case VariableWrapSqlExpression wrap:
-                // Single-use wrap or unrecognised platform: emit the inner expression directly.
+                // Single-use wrap: emit the inner expression directly.
                 return Visit(wrap.Inner);
 
-#if !NET8_0 && !NET9_0
             case InlineSubqueryExpression inlineSub:
                 return VisitInlineSubquery(inlineSub);
-#endif
 
             default:
                 return base.VisitExtension(expression);
         }
     }
 
-#if !NET8_0 && !NET9_0
     /// <summary>
-    /// Returns <see langword="true"/> if this generator is targeting PostgreSQL, which uses
-    /// <c>CROSS JOIN LATERAL</c> instead of SQL Server's <c>CROSS APPLY</c>.
-    /// Detection is based on the SQL identifier delimiter: SQL Server uses <c>[…]</c>,
-    /// PostgreSQL uses <c>"…"</c>.
+    /// Returns <see langword="true"/> if this generator is targeting a database that uses
+    /// <c>CROSS JOIN LATERAL</c> syntax (e.g. PostgreSQL) rather than SQL Server's
+    /// <c>CROSS APPLY</c>.
+    /// <para>
+    /// Detection uses two signals in combination:
+    /// <list type="bullet">
+    ///   <item>The <see cref="ISqlGenerationHelper"/> is NOT from the SQL Server provider
+    ///         assembly (<c>Microsoft.EntityFrameworkCore.SqlServer</c>).</item>
+    ///   <item>The helper uses double-quote identifier delimiters (<c>"x"</c>), which is the
+    ///         ISO-SQL standard followed by PostgreSQL, SQLite, and others.</item>
+    /// </list>
+    /// </para>
     /// </summary>
-    protected virtual bool IsPostgres
-        => Dependencies.SqlGenerationHelper.DelimitIdentifier("x").StartsWith('"');
+    protected virtual bool UsesLateralJoin
+    {
+        get
+        {
+            var assemblyName = Dependencies.SqlGenerationHelper.GetType().Assembly.GetName().Name
+                               ?? string.Empty;
+            // SQL Server uses CROSS APPLY; exclude it explicitly.
+            if (assemblyName.Contains("SqlServer", StringComparison.OrdinalIgnoreCase))
+                return false;
+            // Secondary heuristic: ISO-SQL providers use double-quote identifiers.
+            return Dependencies.SqlGenerationHelper.DelimitIdentifier("x").StartsWith('"');
+        }
+    }
 
     /// <summary>
     /// Emits the inline subquery that materialises a reused local variable exactly once per row.
@@ -81,12 +98,12 @@ public class ProjectablesQuerySqlGenerator : QuerySqlGenerator
 
     /// <summary>
     /// Overrides cross-apply emission to use <c>CROSS JOIN LATERAL</c> when targeting
-    /// PostgreSQL (or any provider that uses double-quote identifiers) for <see cref="InlineSubqueryExpression"/>
+    /// PostgreSQL (or any ISO-SQL provider) for <see cref="InlineSubqueryExpression"/>
     /// tables; delegates to the base implementation for all other table types.
     /// </summary>
     protected override Expression VisitCrossApply(CrossApplyExpression crossApplyExpression)
     {
-        if (IsPostgres && crossApplyExpression.Table is InlineSubqueryExpression inlineSub)
+        if (UsesLateralJoin && crossApplyExpression.Table is InlineSubqueryExpression inlineSub)
         {
             Sql.Append("CROSS JOIN LATERAL ");
             return VisitInlineSubquery(inlineSub);
@@ -116,7 +133,7 @@ public class ProjectablesQuerySqlGenerator : QuerySqlGenerator
 
         // Build column mapping: variableName → ColumnExpression referencing the subquery table.
         var columnMapping = new Dictionary<string, ColumnExpression>(StringComparer.Ordinal);
-        var inlineSubqueryTables = new List<CrossApplyExpression>();
+        var inlineSubqueries = new List<InlineSubqueryExpression>();
         var counter = 0;
 
         foreach (var (variableName, wraps) in multiUse)
@@ -129,18 +146,99 @@ public class ProjectablesQuerySqlGenerator : QuerySqlGenerator
             counter++;
             var first = wraps[0];
             var subquery = new InlineSubqueryExpression(tableAlias, first.Inner, variableName);
-            inlineSubqueryTables.Add(new CrossApplyExpression(subquery));
-            columnMapping[variableName] = new ColumnExpression(variableName, tableAlias, first.Type, first.TypeMapping!, false);
+            inlineSubqueries.Add(subquery);
+            columnMapping[variableName] = CreateColumnExpr(rootSelect, subquery, variableName, first.Type, first.TypeMapping!);
         }
 
         // Rewrite: replace VariableWrapSqlExpression with the column references.
         var replacer = new VariableWrapReplacer(columnMapping);
         var rewritten = (SelectExpression)replacer.Visit(rootSelect);
 
-        // Append the new subquery table sources.
-        rewritten.SetTables([.. rewritten.Tables, .. inlineSubqueryTables]);
+        // Append the new subquery table sources (wrapped in CrossApplyExpression).
+        AddInlineSubqueries(rewritten, inlineSubqueries);
 
         return rewritten;
+    }
+
+    // ── version-specific helpers ────────────────────────────────────────────────────────────
+
+    // Reflection fields cached per AppDomain – access pattern depends on EF Core version.
+
+#if NET8_0
+    private static readonly FieldInfo TablesField8 =
+        typeof(SelectExpression).GetField("_tables", BindingFlags.NonPublic | BindingFlags.Instance)!;
+
+    private static readonly FieldInfo TableReferencesField8 =
+        typeof(SelectExpression).GetField("_tableReferences", BindingFlags.NonPublic | BindingFlags.Instance)!;
+
+    private static readonly Type TableReferenceExpressionType8 =
+        typeof(SelectExpression).Assembly.GetType("Microsoft.EntityFrameworkCore.Query.Internal.TableReferenceExpression")!;
+
+    private static readonly ConstructorInfo TableReferenceExpressionCtor8 =
+        TableReferenceExpressionType8.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)[0];
+
+    private static readonly MethodInfo AddTableMethod8 =
+        typeof(SelectExpression).GetMethod("AddTable", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)!;
+
+    private static readonly MethodInfo CreateColumnExpressionMethod8 =
+        typeof(SelectExpression).GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+            .First(m => m.Name == "CreateColumnExpression" && !m.IsStatic);
+#elif NET9_0
+    private static readonly FieldInfo TablesField9 =
+        typeof(SelectExpression).GetField("_tables", BindingFlags.NonPublic | BindingFlags.Instance)!;
+#endif
+
+    /// <summary>
+    /// Creates a <see cref="ColumnExpression"/> referencing a column inside <paramref name="subquery"/>
+    /// in a way that is compatible with all supported EF Core versions.
+    /// </summary>
+    private static ColumnExpression CreateColumnExpr(
+        SelectExpression selectExpr,
+        InlineSubqueryExpression subquery,
+        string columnName,
+        Type type,
+        RelationalTypeMapping typeMapping)
+    {
+#if NET8_0
+        // EF Core 8: ColumnExpression has no public ctor (string name, string alias, …).
+        // We must use SelectExpression.CreateColumnExpression (public method) which
+        // looks up the table by reference in _tables, then maps to _tableReferences.
+        // The CrossApplyExpression wrapper is what gets added to _tables, so we pass
+        // the wrapper (not the inner InlineSubqueryExpression) to CreateColumnExpression.
+        var crossApply = new CrossApplyExpression(subquery);
+        var tableRef = TableReferenceExpressionCtor8.Invoke([selectExpr, crossApply.Alias ?? subquery.Alias!]);
+        AddTableMethod8.Invoke(selectExpr, [crossApply, tableRef]);
+        return (ColumnExpression)CreateColumnExpressionMethod8.Invoke(selectExpr,
+            [crossApply, columnName, type, typeMapping, (bool?)false])!;
+#else
+        // EF Core 9+: public ColumnExpression(name, tableAlias, type, typeMapping, nullable)
+        return new ColumnExpression(columnName, subquery.Alias!, type, typeMapping, false);
+#endif
+    }
+
+    /// <summary>
+    /// Appends <see cref="CrossApplyExpression"/> wrappers for each <paramref name="subqueries"/>
+    /// to the table list of <paramref name="selectExpr"/>, using the API available in the
+    /// current EF Core version.
+    /// </summary>
+    private static void AddInlineSubqueries(
+        SelectExpression selectExpr,
+        IReadOnlyList<InlineSubqueryExpression> subqueries)
+    {
+#if NET8_0
+        // Tables were already registered inside CreateColumnExpr (EF8 path uses AddTableMethod8).
+        // Nothing additional to do here for EF8.
+#elif NET9_0
+        // EF Core 9 has no public SetTables; mutate _tables directly via the cached field.
+        if (TablesField9.GetValue(selectExpr) is List<TableExpressionBase> tables9)
+        {
+            foreach (var sub in subqueries)
+                tables9.Add(new CrossApplyExpression(sub));
+        }
+#else
+        // EF Core 10+: SetTables is available.
+        selectExpr.SetTables([.. selectExpr.Tables, .. subqueries.Select(s => new CrossApplyExpression(s))]);
+#endif
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────────────────
@@ -205,5 +303,4 @@ public class ProjectablesQuerySqlGenerator : QuerySqlGenerator
             return base.VisitExtension(node);
         }
     }
-#endif
 }
