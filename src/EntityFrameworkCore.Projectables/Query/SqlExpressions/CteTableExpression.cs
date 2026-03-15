@@ -18,17 +18,17 @@ public sealed class CteTableExpression : TableExpressionBase
 #endif
 {
     /// <summary>Creates a new <see cref="CteTableExpression"/> with the given name and body.</summary>
-    public CteTableExpression(string cteName, SelectExpression inner)
-        : base(cteName)
+    public CteTableExpression(string alias, SelectExpression inner)
+        : base(alias)
     {
         Inner = inner;
     }
 
-    private CteTableExpression(string cteName, SelectExpression inner, IReadOnlyDictionary<string, IAnnotation> annotations)
+    private CteTableExpression(string alias, SelectExpression inner, IReadOnlyDictionary<string, IAnnotation> annotations)
 #if NET8_0
-        : base(cteName, annotations.Values)
+        : base(alias, annotations.Values)
 #else
-        : base(cteName, annotations)
+        : base(alias, annotations)
 #endif
     {
         Inner = inner;
@@ -40,7 +40,6 @@ public sealed class CteTableExpression : TableExpressionBase
     /// <summary>The <see cref="SelectExpression"/> that defines the CTE body.</summary>
     public SelectExpression Inner { get; }
 
-    /// <inheritdoc/>
     protected override Expression VisitChildren(ExpressionVisitor visitor)
     {
         var newInner = (SelectExpression)visitor.Visit(Inner);

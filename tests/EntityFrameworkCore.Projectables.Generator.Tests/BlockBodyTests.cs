@@ -913,4 +913,32 @@ namespace Foo {
 
         return Verifier.Verify(result.GeneratedTrees[0].ToString());
     }
+
+    [Fact]
+    public Task BlockBodiedMethod_WithLocalVariableReferencedMultipleTimes()
+    {
+        var compilation = CreateCompilation(@"
+using System;
+using EntityFrameworkCore.Projectables;
+namespace Foo {
+    class C {
+        public int Bar { get; set; }
+
+        [Projectable(AllowBlockBody = true)]
+        public int Foo()
+        {
+            var doubled = Bar * 2;
+            return doubled + doubled;
+        }
+    }
+}
+");
+
+        var result = RunGenerator(compilation);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Single(result.GeneratedTrees);
+
+        return Verifier.Verify(result.GeneratedTrees[0].ToString());
+    }
 }

@@ -468,7 +468,9 @@ internal class BlockStatementConverter
         {
             if (_localVariables.TryGetValue(node.Identifier.Text, out var replacement))
             {
-                _referenceCount[node.Identifier.Text] = _referenceCount.TryGetValue(node.Identifier.Text, out var count) ? count + 1 : 1;
+                _referenceCount[node.Identifier.Text] = _referenceCount.TryGetValue(node.Identifier.Text, out var count)
+                    ? count + 1
+                    : 1;
                 return SyntaxFactory.ParenthesizedExpression(replacement.WithoutTrivia())
                     .WithTriviaFrom(node);
             }
