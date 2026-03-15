@@ -9,7 +9,8 @@ INNER JOIN (
     WHERE [o1].[row] <= 2
 ) AS [o2] ON [u].[Id] = [o2].[UserId]
 WHERE (
-    SELECT TOP(1) [o].[Id]
+    SELECT [o].[Id]
     FROM [Order] AS [o]
     WHERE [u].[Id] = [o].[UserId]
-    ORDER BY [o].[RecordDate] DESC) > 100
+    ORDER BY [o].[RecordDate] DESC
+    FETCH FIRST 1 ROWS ONLY) > 100

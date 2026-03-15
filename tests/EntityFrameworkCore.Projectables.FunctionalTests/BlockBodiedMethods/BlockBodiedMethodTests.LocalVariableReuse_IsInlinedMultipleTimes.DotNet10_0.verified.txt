@@ -1,2 +1,5 @@
-﻿SELECT [e].[Value] * 2 + [e].[Value] * 2
+﻿SELECT [w].[doubled] + [w].[doubled]
 FROM [Entity] AS [e]
+CROSS APPLY (
+    SELECT [e].[Value] * 2 AS [doubled]
+) AS [w]
