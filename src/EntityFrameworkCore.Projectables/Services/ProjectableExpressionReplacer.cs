@@ -145,7 +145,10 @@ namespace EntityFrameworkCore.Projectables.Services
 
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {
-            // Replace MethodGroup arguments with their reflected expressions.
+            // Variable.Wrap("name", value) is now handled by VariableWrapTranslatorPlugin during
+            // EF Core's SQL translation phase, which converts it to a VariableWrapSqlExpression.
+            // We no longer strip it here so EF Core sees the call and can translate it properly.
+            // (Single-use wraps are inlined; multi-use wraps get a CROSS APPLY on net10.0+.)
             // No-alloc fast-path: scan args without allocating; only copy the array and call
             // Update() when a replacement is actually found (method-group arguments are rare).
             Expression[]? updatedArgs = null;

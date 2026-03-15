@@ -1,0 +1,8 @@
+﻿SELECT CASE
+    WHEN [e].[Value] > 100 THEN 100
+    ELSE [e].[Value]
+END + CASE
+    WHEN [e].[Value] > 100 THEN 100
+    ELSE [e].[Value]
+END
+FROM [Entity] AS [e]

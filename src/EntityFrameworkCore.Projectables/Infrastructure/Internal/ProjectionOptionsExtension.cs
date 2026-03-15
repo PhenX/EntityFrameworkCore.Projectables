@@ -1,5 +1,6 @@
 ﻿using EntityFrameworkCore.Projectables.Infrastructure;
 using EntityFrameworkCore.Projectables.Infrastructure.Internal;
+using EntityFrameworkCore.Projectables.Query;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata.Conventions;
 using Microsoft.EntityFrameworkCore.Metadata.Conventions.Infrastructure;
@@ -41,6 +42,10 @@ namespace EntityFrameworkCore.Projectables.Infrastructure.Internal
             // Register a convention that will ignore properties marked with the ProjectableAttribute
             services.AddScoped<IConventionSetPlugin, ProjectablePropertiesNotMappedConventionPlugin>();
 
+            // Translate Variable.Wrap(name, expr) calls to VariableWrapSqlExpression so the
+            // ProjectablesQuerySqlGenerator can decide whether to inline or CROSS-APPLY them.
+            services.AddSingleton<IMethodCallTranslatorPlugin, VariableWrapTranslatorPlugin>();
+
             static object CreateTargetInstance(IServiceProvider services, ServiceDescriptor descriptor)
             {
                 if (descriptor.ImplementationInstance is not null)
@@ -56,6 +61,47 @@ namespace EntityFrameworkCore.Projectables.Infrastructure.Internal
 
             // Custom convention to handle global query filters, etc
             services.AddScoped<IConventionSetPlugin, CustomConventionSetPlugin>();
+
+            // Register the SQL generator factory that emits CROSS APPLY / CROSS JOIN LATERAL
+            // subqueries for reused local variables in block-bodied projectable methods.
+            services.Replace(ServiceDescriptor.Scoped<IQuerySqlGeneratorFactory, ProjectablesQuerySqlGeneratorFactory>());
+
+            // Wrap the query translation postprocessor to handle VariableWrapSqlExpression before
+            // EF Core's SqlNullabilityProcessor encounters it.
+            var postprocessorDescriptor = services.FirstOrDefault(x => x.ServiceType == typeof(IQueryTranslationPostprocessorFactory));
+            if (postprocessorDescriptor is not null)
+            {
+                var decoratorObjectFactory = ActivatorUtilities.CreateFactory(
+                    typeof(VariableWrapQueryTranslationPostprocessorFactory),
+                    new[] { postprocessorDescriptor.ServiceType });
+
+                services.Replace(ServiceDescriptor.Describe(
+                    postprocessorDescriptor.ServiceType,
+                    serviceProvider => decoratorObjectFactory(serviceProvider, new[] { CreateTargetInstance(serviceProvider, postprocessorDescriptor) }),
+                    postprocessorDescriptor.Lifetime
+                ));
+            }
+
+#if NET8_0 || NET9_0
+            // In EF Core 8/9 the execution-time SqlNullabilityProcessor (run inside
+            // RelationalParameterBasedSqlProcessor.Optimize) throws on unknown
+            // TableExpressionBase subtypes — including our InlineSubqueryExpression.
+            // ProjectablesParameterBasedSqlProcessorFactory decorates the provider's factory
+            // and temporarily hides InlineSubqueryExpression tables around the nullability pass.
+            var paramSqlDescriptor = services.FirstOrDefault(x => x.ServiceType == typeof(IRelationalParameterBasedSqlProcessorFactory));
+            if (paramSqlDescriptor is not null)
+            {
+                var paramFactory = ActivatorUtilities.CreateFactory(
+                    typeof(ProjectablesParameterBasedSqlProcessorFactory),
+                    new[] { paramSqlDescriptor.ServiceType });
+
+                services.Replace(ServiceDescriptor.Describe(
+                    paramSqlDescriptor.ServiceType,
+                    sp => paramFactory(sp, new[] { CreateTargetInstance(sp, paramSqlDescriptor) }),
+                    paramSqlDescriptor.Lifetime
+                ));
+            }
+#endif
 
             if (_compatibilityMode is CompatibilityMode.Full)
             {

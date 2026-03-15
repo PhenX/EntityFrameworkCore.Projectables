@@ -1,0 +1,5 @@
+﻿SELECT "v"."doubled" + "v"."doubled"
+FROM "Entity" AS "e"
+CROSS JOIN LATERAL (
+    SELECT "e"."Value" * 2 AS "doubled"
+) AS "v"

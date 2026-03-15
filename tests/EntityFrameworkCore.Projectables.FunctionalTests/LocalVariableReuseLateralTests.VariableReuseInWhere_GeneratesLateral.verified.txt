@@ -1,0 +1,3 @@
+﻿SELECT "e"."Id", "e"."IsActive", "e"."Name", "e"."Score", "e"."Value"
+FROM "Entity" AS "e"
+WHERE ("e"."Score" * 2) > 50 AND ("e"."Score" * 2) < 200

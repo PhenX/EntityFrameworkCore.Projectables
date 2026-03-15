@@ -1,0 +1,8 @@
+﻿SELECT [e].[Id] AS [OuterId], [e1].[Name] AS [InnerName]
+FROM [Entity] AS [e]
+INNER JOIN (
+    SELECT [e0].[Id], [e0].[Name]
+    FROM [Entity] AS [e0]
+    WHERE [e0].[Id] >= 1 AND [e0].[Id] <= 10
+) AS [e1] ON [e].[Id] = ([e1].[Id] + 1)
+WHERE [e].[Id] >= 1 AND [e].[Id] <= 10

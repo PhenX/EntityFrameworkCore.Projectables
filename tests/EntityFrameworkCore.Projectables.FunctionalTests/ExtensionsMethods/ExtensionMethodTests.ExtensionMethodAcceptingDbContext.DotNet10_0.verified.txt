@@ -1,7 +1,8 @@
 ﻿SELECT [e1].[Id], [e1].[Name]
 FROM [Entity] AS [e]
 OUTER APPLY (
-    SELECT TOP(1) [e0].[Id], [e0].[Name]
+    SELECT [e0].[Id], [e0].[Name]
     FROM [Entity] AS [e0]
     WHERE [e0].[Id] > [e].[Id]
+    FETCH FIRST 1 ROWS ONLY
 ) AS [e1]

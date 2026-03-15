@@ -1,0 +1,6 @@
+﻿SELECT "e"."Id", "e"."IsActive", "e"."Name", "e"."Score", "e"."Value"
+FROM "Entity" AS "e"
+CROSS JOIN LATERAL (
+    SELECT "e"."Score" * 2 AS "adjusted"
+) AS "v"
+WHERE "v"."adjusted" > 50 AND "v"."adjusted" < 200

@@ -1,0 +1,7 @@
+﻿SELECT [e].[Id], [e].[Name]
+FROM [Entity] AS [e]
+WHERE [e].[Id] >= 1 AND [e].[Id] <= 5
+UNION ALL
+SELECT [e0].[Id], [e0].[Name]
+FROM [Entity] AS [e0]
+WHERE [e0].[Id] >= 1 AND [e0].[Id] <= 5

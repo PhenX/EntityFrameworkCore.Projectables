@@ -1,0 +1,2 @@
+﻿SELECT ((([e].[Score] + 100) * 2) + (([e].[Score] + 100) * 2)) + ([e].[Score] + 100)
+FROM [Entity] AS [e]

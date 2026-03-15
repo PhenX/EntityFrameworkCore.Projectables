@@ -1,6 +1,7 @@
 ﻿SELECT (
-    SELECT TOP(1) [o].[RecordDate]
+    SELECT [o].[RecordDate]
     FROM [Order] AS [o]
     WHERE [u].[Id] = [o].[UserId]
-    ORDER BY [o].[RecordDate] DESC)
+    ORDER BY [o].[RecordDate] DESC
+    FETCH FIRST 1 ROWS ONLY)
 FROM [User] AS [u]

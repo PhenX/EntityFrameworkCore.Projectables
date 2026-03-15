@@ -1,0 +1,2 @@
+﻿SELECT (([e].[Value] * 2) * ([e].[Value] * 2)) + (([e].[Value] * 3) * ([e].[Value] * 3))
+FROM [Entity] AS [e]

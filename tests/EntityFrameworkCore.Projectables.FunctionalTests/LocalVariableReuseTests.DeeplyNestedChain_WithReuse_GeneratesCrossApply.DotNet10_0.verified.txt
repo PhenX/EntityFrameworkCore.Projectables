@@ -1,0 +1,5 @@
+﻿SELECT ([v].[doubled] + [v].[doubled]) + ([e].[Score] + 100)
+FROM [Entity] AS [e]
+CROSS APPLY (
+    SELECT ([e].[Score] + 100) * 2 AS [doubled]
+) AS [v]

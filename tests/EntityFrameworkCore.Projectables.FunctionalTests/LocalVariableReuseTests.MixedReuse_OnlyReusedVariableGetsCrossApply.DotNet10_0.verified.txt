@@ -1,0 +1,5 @@
+﻿SELECT ([v].[multiplied] + [v].[multiplied]) + ([e].[Score] + 10)
+FROM [Entity] AS [e]
+CROSS APPLY (
+    SELECT [e].[Value] * 4 AS [multiplied]
+) AS [v]

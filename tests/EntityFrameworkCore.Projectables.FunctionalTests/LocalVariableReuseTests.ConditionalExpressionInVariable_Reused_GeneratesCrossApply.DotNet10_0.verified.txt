@@ -1,0 +1,8 @@
+﻿SELECT [v].[capped] + [v].[capped]
+FROM [Entity] AS [e]
+CROSS APPLY (
+    SELECT CASE
+        WHEN [e].[Value] > 100 THEN 100
+        ELSE [e].[Value]
+    END AS [capped]
+) AS [v]
