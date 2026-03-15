@@ -43,7 +43,7 @@ namespace EntityFrameworkCore.Projectables.Infrastructure.Internal
             services.AddScoped<IConventionSetPlugin, ProjectablePropertiesNotMappedConventionPlugin>();
 
             // Translate Variable.Wrap(name, expr) calls to VariableWrapSqlExpression so the
-            // CteAwareQuerySqlGenerator can decide whether to inline or CROSS-APPLY them.
+            // ProjectablesQuerySqlGenerator can decide whether to inline or CROSS-APPLY them.
             services.AddSingleton<IMethodCallTranslatorPlugin, VariableWrapTranslatorPlugin>();
 
             static object CreateTargetInstance(IServiceProvider services, ServiceDescriptor descriptor)

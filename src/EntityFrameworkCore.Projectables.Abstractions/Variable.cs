@@ -2,7 +2,8 @@ namespace EntityFrameworkCore.Projectables;
 
 /// <summary>
 /// Utility class for marking reused local variables in projectable expression trees,
-/// enabling CTE-based SQL deduplication at the SQL generation layer.
+/// enabling the SQL generator to hoist shared computations into <c>CROSS APPLY</c> (SQL Server)
+/// or <c>CROSS JOIN LATERAL</c> (PostgreSQL) inline subqueries.
 /// </summary>
 public static class Variable
 {
@@ -11,11 +12,14 @@ public static class Variable
     /// <para>
     /// When the same <paramref name="name"/> appears more than once in a generated
     /// expression tree (because the corresponding local variable was referenced multiple times
-    /// in a <c>[Projectable(AllowBlockBody = true)]</c> method body), the SQL generator can
-    /// extract the shared computation into a SQL CTE:
+    /// in a <c>[Projectable(AllowBlockBody = true)]</c> method body), the SQL generator hoists
+    /// the shared computation into a single inline subquery evaluated exactly once per row:
     /// <code>
-    /// WITH [name] AS (&lt;inner expression&gt;)
-    /// SELECT … FROM … JOIN [name] ON …
+    /// -- SQL Server
+    /// CROSS APPLY (SELECT &lt;inner expression&gt; AS [name]) AS [v]
+    ///
+    /// -- PostgreSQL
+    /// CROSS JOIN LATERAL (SELECT &lt;inner expression&gt; AS "name") AS "v"
     /// </code>
     /// </para>
     /// <para>

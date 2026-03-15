@@ -18,7 +18,8 @@ internal class BlockStatementConverter
 
     // Pre-computed reference counts for each local variable across the code statements
     // (statements that are not local declarations). Variables with count > 1 are wrapped
-    // in Variable.Wrap so the SQL generator can hoist them into a CTE.
+    // in Variable.Wrap so the SQL generator can hoist them into a CROSS APPLY / LATERAL
+    // inline subquery, computing the expression exactly once per row.
     private IReadOnlyDictionary<string, int> _preComputedRefCounts = new Dictionary<string, int>();
 
     public BlockStatementConverter(SourceProductionContext context, ExpressionSyntaxRewriter expressionRewriter)
@@ -99,7 +100,8 @@ internal class BlockStatementConverter
         // Pre-compute how many times each local variable is referenced in the code
         // statements (non-declaration statements). Variables with count > 1 will be
         // wrapped in Variable.Wrap in the generated expression tree so the SQL generator
-        // can identify shared computations and hoist them into a CTE.
+        // can identify shared computations and hoist them into a CROSS APPLY / LATERAL
+        // inline subquery.
         _preComputedRefCounts = ComputeCodeStatementRefCounts(codeStatements);
         // next as its "fallthrough" branch.  This naturally handles chains like:
         //   if (a) return 1;  if (b) return 2;  return 3;
@@ -358,7 +360,8 @@ internal class BlockStatementConverter
     /// Replaces references to local variables in the given expression with their initializer expressions.
     /// Also tracks how many times each variable is referenced via <see cref="_localVariableReferenceCount"/>.
     /// Variables referenced more than once in the final expression are wrapped in
-    /// <c>Variable.Wrap("name", expr)</c> so the SQL generator can hoist them into a CTE.
+    /// <c>Variable.Wrap("name", expr)</c> so the SQL generator can hoist them into a
+    /// <c>CROSS APPLY</c> / <c>CROSS JOIN LATERAL</c> inline subquery.
     /// </summary>
     private ExpressionSyntax ReplaceLocalVariables(ExpressionSyntax expression)
         => (ExpressionSyntax)new LocalVariableReplacer(_localVariables, _localVariableReferenceCount, _preComputedRefCounts).Visit(expression);
@@ -512,8 +515,9 @@ internal class BlockStatementConverter
 
                 // When the variable is referenced more than once in the code statements,
                 // wrap the substituted expression in Variable.Wrap("name", expr).
-                // This embeds a CTE marker directly into the generated expression tree
-                // so the runtime SQL generator can identify shared sub-computations.
+                // This embeds a reuse marker into the generated expression tree so the
+                // SQL generator can hoist shared sub-computations into a CROSS APPLY /
+                // CROSS JOIN LATERAL inline subquery, evaluated exactly once per row.
                 if (_preComputedRefCounts.TryGetValue(varName, out var preCount) && preCount > 1)
                 {
                     return BuildVariableWrapCall(varName, inner).WithTriviaFrom(node);
