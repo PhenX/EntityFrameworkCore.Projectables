@@ -6,21 +6,11 @@ using Xunit;
 namespace EntityFrameworkCore.Projectables.FunctionalTests;
 
 /// <summary>
-/// Verifies that the <c>CteAwareQuerySqlGenerator</c> emits a proper <c>WITH … AS (…)</c>
-/// preamble when the same filtered base query is used as a table source more than once in a
-/// single SQL statement.
-///
-/// <para>
-/// EF Core assigns fresh table aliases (e.g. <c>[e]</c>, <c>[e0]</c>) to every logical copy of
-/// a sub-expression, so two occurrences of the same LINQ query compile to structurally equivalent
-/// but alias-different <see cref="Microsoft.EntityFrameworkCore.Query.SqlExpressions.SelectExpression"/>
-/// nodes.  The <c>CteDeduplicatingRewriter</c> uses
-/// <c>NormalizedSelectExpressionComparer</c> — which ignores alias names — to detect these
-/// duplicates and hoists them into a single <c>WITH</c> clause.
-/// </para>
+/// Verifies that projectable properties and methods work correctly when the same queryable is
+/// used as a table source more than once in a single SQL statement (union, concat, self-join).
 /// </summary>
 [UsesVerify]
-public class CteTests
+public class SetOperationWithProjectableTests
 {
     public record Entity
     {
@@ -36,11 +26,10 @@ public class CteTests
 
     /// <summary>
     /// <c>subset.Concat(subset)</c> translates to <c>UNION ALL</c>.
-    /// Both halves share the same filtered <see cref="Microsoft.EntityFrameworkCore.Query.SqlExpressions.SelectExpression"/>,
-    /// so the <c>CteDeduplicatingRewriter</c> should extract it into a single <c>WITH</c> clause.
+    /// Both halves use the same filtered projectable condition.
     /// </summary>
     [Fact]
-    public Task DuplicateSubquery_ViaConcat_IsExtractedToCte()
+    public Task ProjectableInConcat_BothSidesUseProjectable()
     {
         using var dbContext = new SampleDbContext<Entity>();
 
@@ -54,11 +43,10 @@ public class CteTests
 
     /// <summary>
     /// <c>subset.Union(subset)</c> translates to <c>UNION</c> (distinct).
-    /// Both halves share the same filtered <see cref="Microsoft.EntityFrameworkCore.Query.SqlExpressions.SelectExpression"/>,
-    /// so the <c>CteDeduplicatingRewriter</c> should extract it into a single <c>WITH</c> clause.
+    /// Both halves use the same filtered projectable property.
     /// </summary>
     [Fact]
-    public Task DuplicateSubquery_ViaUnion_IsExtractedToCte()
+    public Task ProjectableInUnion_BothSidesUseProjectable()
     {
         using var dbContext = new SampleDbContext<Entity>();
 
@@ -71,12 +59,10 @@ public class CteTests
     }
 
     /// <summary>
-    /// Self-join with the same filtered query on both sides.
-    /// The two filtered table sources for the join are structurally identical, so the
-    /// <c>CteDeduplicatingRewriter</c> should detect the duplicate and emit a <c>WITH</c> clause.
+    /// Self-join with the same filtered query on both sides where both sides use a projectable.
     /// </summary>
     [Fact]
-    public Task DuplicateSubquery_ViaSelfJoin_IsExtractedToCte()
+    public Task ProjectableInSelfJoin_BothSidesUseProjectable()
     {
         using var dbContext = new SampleDbContext<Entity>();
 

@@ -1,0 +1,6 @@
+﻿SELECT ([e].[Value] - 5) * 2
+FROM [Entity] AS [e]
+CROSS APPLY (
+    SELECT [e].[Value] - 5 AS [adjusted]
+) AS [v]
+WHERE [v].[adjusted] > 0 AND [v].[adjusted] < 100

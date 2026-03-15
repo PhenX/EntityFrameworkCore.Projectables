@@ -1,0 +1,5 @@
+﻿SELECT [v].[inner] + [v].[inner]
+FROM [Entity] AS [e]
+CROSS APPLY (
+    SELECT [e].[Value] * 2 AS [inner]
+) AS [v]

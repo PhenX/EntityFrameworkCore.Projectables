@@ -7,26 +7,29 @@ using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 namespace EntityFrameworkCore.Projectables.Query.SqlExpressions;
 
 /// <summary>
-/// A <see cref="TableExpressionBase"/> that represents the inner subquery of a
-/// <c>CROSS APPLY (SELECT <see cref="Inner"/> AS [<see cref="ColumnName"/>]) AS [alias]</c>
-/// expression added by <see cref="CteAwareQuerySqlGenerator"/> to materialise a
-/// <see cref="VariableWrapSqlExpression"/> exactly once per row.
+/// A <see cref="TableExpressionBase"/> that represents a single-column inline subquery used
+/// to materialise a reused local variable exactly once per row:
+/// <code>
+/// (SELECT &lt;Inner&gt; AS [&lt;ColumnName&gt;]) AS [&lt;Alias&gt;]
+/// </code>
+/// This is emitted by <see cref="ProjectablesQuerySqlGenerator"/> as the body of a
+/// <c>CROSS APPLY</c> (SQL Server) or <c>CROSS JOIN LATERAL</c> (PostgreSQL) clause.
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "EF1001:Internal EF Core API usage.", Justification = "Needed")]
-public sealed class VariableWrapCrossApplyExpression : TableExpressionBase
+public sealed class InlineSubqueryExpression : TableExpressionBase
 {
     /// <summary>Creates a new instance.</summary>
-    /// <param name="alias">The SQL table alias (e.g. <c>_cv0</c>) for the CROSS APPLY table.</param>
-    /// <param name="inner">The SQL expression to project as a single column.</param>
-    /// <param name="columnName">The name to give the projected column (the variable name).</param>
-    public VariableWrapCrossApplyExpression(string alias, SqlExpression inner, string columnName)
+    /// <param name="alias">The SQL table alias for the inline subquery.</param>
+    /// <param name="inner">The SQL expression projected as a single column.</param>
+    /// <param name="columnName">The name of the projected column (the original variable name).</param>
+    public InlineSubqueryExpression(string alias, SqlExpression inner, string columnName)
         : base(alias)
     {
         Inner = inner;
         ColumnName = columnName;
     }
 
-    private VariableWrapCrossApplyExpression(
+    private InlineSubqueryExpression(
         string alias,
         SqlExpression inner,
         string columnName,
@@ -37,10 +40,10 @@ public sealed class VariableWrapCrossApplyExpression : TableExpressionBase
         ColumnName = columnName;
     }
 
-    /// <summary>The expression computed inside the CROSS APPLY subquery.</summary>
+    /// <summary>The expression computed inside the inline subquery.</summary>
     public SqlExpression Inner { get; }
 
-    /// <summary>The projected column name inside the CROSS APPLY subquery.</summary>
+    /// <summary>The projected column name (the original local-variable name).</summary>
     public string ColumnName { get; }
 
     /// <inheritdoc/>
@@ -49,13 +52,13 @@ public sealed class VariableWrapCrossApplyExpression : TableExpressionBase
         var newInner = (SqlExpression)visitor.Visit(Inner);
         return ReferenceEquals(newInner, Inner)
             ? this
-            : new VariableWrapCrossApplyExpression(Alias!, newInner, ColumnName,
+            : new InlineSubqueryExpression(Alias!, newInner, ColumnName,
                 GetAnnotations().ToDictionary(a => a.Name, a => a));
     }
 
     /// <inheritdoc/>
     public override TableExpressionBase Clone(string? alias, ExpressionVisitor cloningExpressionVisitor)
-        => new VariableWrapCrossApplyExpression(
+        => new InlineSubqueryExpression(
             alias ?? Alias!,
             (SqlExpression)cloningExpressionVisitor.Visit(Inner),
             ColumnName,
@@ -63,16 +66,16 @@ public sealed class VariableWrapCrossApplyExpression : TableExpressionBase
 
     /// <inheritdoc/>
     public override TableExpressionBase WithAlias(string newAlias)
-        => new VariableWrapCrossApplyExpression(newAlias, Inner, ColumnName,
+        => new InlineSubqueryExpression(newAlias, Inner, ColumnName,
             GetAnnotations().ToDictionary(a => a.Name, a => a));
 
     /// <inheritdoc/>
     protected override TableExpressionBase WithAnnotations(IReadOnlyDictionary<string, IAnnotation> annotations)
-        => new VariableWrapCrossApplyExpression(Alias!, Inner, ColumnName, annotations);
+        => new InlineSubqueryExpression(Alias!, Inner, ColumnName, annotations);
 
     /// <inheritdoc/>
     public override Expression Quote()
-        => throw new NotSupportedException($"{nameof(VariableWrapCrossApplyExpression)} does not support pre-compiled queries.");
+        => throw new NotSupportedException($"{nameof(InlineSubqueryExpression)} does not support pre-compiled queries.");
 
     /// <inheritdoc/>
     protected override void Print(ExpressionPrinter expressionPrinter)
@@ -84,7 +87,7 @@ public sealed class VariableWrapCrossApplyExpression : TableExpressionBase
 
     /// <inheritdoc/>
     public override bool Equals(object? obj)
-        => obj is VariableWrapCrossApplyExpression other
+        => obj is InlineSubqueryExpression other
             && Alias == other.Alias
             && ColumnName == other.ColumnName
             && Inner.Equals(other.Inner);

@@ -62,10 +62,9 @@ namespace EntityFrameworkCore.Projectables.Infrastructure.Internal
             // Custom convention to handle global query filters, etc
             services.AddScoped<IConventionSetPlugin, CustomConventionSetPlugin>();
 
-            // Register the CTE-aware SQL generator factory for deduplicating duplicate
-            // SelectExpression subtrees produced when local variables in block-bodied
-            // projectable methods are referenced more than once.
-            services.Replace(ServiceDescriptor.Scoped<IQuerySqlGeneratorFactory, CteAwareQuerySqlGeneratorFactory>());
+            // Register the SQL generator factory that emits CROSS APPLY / CROSS JOIN LATERAL
+            // subqueries for reused local variables in block-bodied projectable methods.
+            services.Replace(ServiceDescriptor.Scoped<IQuerySqlGeneratorFactory, ProjectablesQuerySqlGeneratorFactory>());
 
             // Wrap the query translation postprocessor to handle VariableWrapSqlExpression before
             // EF Core's SqlNullabilityProcessor encounters it.

@@ -12,9 +12,9 @@ namespace EntityFrameworkCore.Projectables.Query.SqlExpressions;
 /// The source generator wraps each occurrence of a reused local variable in a call to
 /// <see cref="Variable.Wrap{T}(string, T)"/>.  EF Core's method-call translator converts those
 /// calls to <see cref="VariableWrapSqlExpression"/> nodes.  The
-/// <see cref="CteAwareQuerySqlGenerator"/> then replaces multi-occurrence groups with a
-/// <c>CROSS APPLY (SELECT … AS [name]) AS [alias]</c> table source so that the expression is
-/// computed exactly once per row.
+/// <see cref="ProjectablesQuerySqlGenerator"/> then replaces multi-occurrence groups with a
+/// <c>CROSS APPLY</c> (SQL Server) or <c>CROSS JOIN LATERAL</c> (PostgreSQL) inline subquery so
+/// that the expression is computed exactly once per row.
 /// </para>
 /// <para>
 /// Single-occurrence nodes (where the variable is only used once) are lowered to the plain

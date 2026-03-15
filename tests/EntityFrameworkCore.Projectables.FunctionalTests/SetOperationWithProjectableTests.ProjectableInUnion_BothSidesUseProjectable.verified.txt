@@ -1,0 +1,7 @@
+﻿SELECT [e].[Id], [e].[Name]
+FROM [Entity] AS [e]
+WHERE ([e].[Id] % 2) = 0
+UNION
+SELECT [e0].[Id], [e0].[Name]
+FROM [Entity] AS [e0]
+WHERE ([e0].[Id] % 2) = 0

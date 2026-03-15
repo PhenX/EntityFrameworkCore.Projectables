@@ -1,0 +1,8 @@
+﻿SELECT ("v"."doubled" * "v"."doubled") + ("v0"."tripled" * "v0"."tripled")
+FROM "Entity" AS "e"
+CROSS JOIN LATERAL (
+    SELECT "e"."Value" * 2 AS "doubled"
+) AS "v"
+CROSS JOIN LATERAL (
+    SELECT "e"."Value" * 3 AS "tripled"
+) AS "v0"

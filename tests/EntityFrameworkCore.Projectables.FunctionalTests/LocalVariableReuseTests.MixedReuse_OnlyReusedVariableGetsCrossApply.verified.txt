@@ -1,0 +1,2 @@
+﻿SELECT (([e].[Value] * 4) + ([e].[Value] * 4)) + ([e].[Score] + 10)
+FROM [Entity] AS [e]

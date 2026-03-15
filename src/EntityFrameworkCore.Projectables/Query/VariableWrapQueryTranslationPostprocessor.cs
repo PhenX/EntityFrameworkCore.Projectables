@@ -11,9 +11,9 @@ namespace EntityFrameworkCore.Projectables.Query;
 /// <para>
 /// This postprocessor runs <em>before</em> the relational nullability processor so that
 /// <see cref="VariableWrapSqlExpression"/> nodes — which EF Core's nullability processor does
-/// not understand — are either replaced by <c>CROSS APPLY</c> table sources (on .NET 10 / EF
-/// Core 10) or lowered to their inner expressions (on earlier versions) before they can cause
-/// an exception.
+/// not understand — are either hoisted into <c>CROSS APPLY</c> / <c>CROSS JOIN LATERAL</c>
+/// subqueries (on .NET 10 / EF Core 10+) or lowered to their inner expressions (on earlier
+/// versions) before the nullability processor encounters them.
 /// </para>
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "EF1001:Internal EF Core API usage.", Justification = "Needed")]
@@ -34,11 +34,12 @@ internal sealed class VariableWrapQueryTranslationPostprocessorFactory(
 /// Processes <see cref="VariableWrapSqlExpression"/> nodes in the SQL expression tree before
 /// delegating to the inner postprocessor.
 /// <list type="bullet">
-///   <item>On .NET 10 / EF Core 10: Replaces multi-use <see cref="VariableWrapSqlExpression"/>
-///         groups with <c>CROSS APPLY (SELECT … AS [name]) AS [alias]</c> table sources
-///         and <see cref="ColumnExpression"/> references.</item>
+///   <item>On .NET 10 / EF Core 10+: Replaces multi-use <see cref="VariableWrapSqlExpression"/>
+///         groups with <c>CROSS APPLY</c> (SQL Server) or <c>CROSS JOIN LATERAL</c> (PostgreSQL)
+///         inline subquery table sources so each local variable expression is computed exactly
+///         once per row.</item>
 ///   <item>On earlier versions: Lowers every <see cref="VariableWrapSqlExpression"/> to its
-///         plain inner expression (identity semantics).</item>
+///         plain inner expression (identity semantics, no deduplication).</item>
 /// </list>
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "EF1001:Internal EF Core API usage.", Justification = "Needed")]
@@ -65,7 +66,7 @@ internal sealed class VariableWrapQueryTranslationPostprocessor(
             return query;
 
 #if !NET8_0 && !NET9_0
-        var transformed = CteAwareQuerySqlGenerator.TransformVariableWrapsOnSelectExpression(selectExpression);
+        var transformed = ProjectablesQuerySqlGenerator.TransformVariableWrapsOnSelectExpression(selectExpression);
         return ReferenceEquals(transformed, selectExpression)
             ? query
             : shaped.UpdateQueryExpression(transformed);
