@@ -17,10 +17,18 @@ namespace EntityFrameworkCore.Projectables.Query;
 /// different SQL shape and cannot be substituted with a plain table reference.
 /// </para>
 /// <para>
+/// <b>Alias-neutral equality:</b> EF Core assigns fresh aliases (e.g. <c>e</c>, <c>e0</c>) to
+/// each occurrence of a sub-expression, so two logically identical <see cref="SelectExpression"/>
+/// trees typically differ only in their alias names.  This rewriter therefore uses
+/// <see cref="NormalizedSelectExpressionComparer"/> instead of
+/// <see cref="ExpressionEqualityComparer"/> to detect structural equivalence regardless of alias
+/// names.
+/// </para>
+/// <para>
 /// Two passes are performed:
 /// <list type="number">
-///   <item>Count occurrences of every table-source <see cref="SelectExpression"/> subtree by
-///         structural equality.</item>
+///   <item>Count occurrences of every table-source <see cref="SelectExpression"/> subtree using
+///         alias-neutral structural equality.</item>
 ///   <item>Replace all occurrences of any subtree that appears more than once with a
 ///         <see cref="CteTableExpression"/> and add the defining expression to
 ///         <see cref="CollectedCtes"/> in depth-first order so that dependent CTEs are emitted
@@ -32,10 +40,10 @@ namespace EntityFrameworkCore.Projectables.Query;
 public sealed class CteDeduplicatingRewriter : ExpressionVisitor
 {
     private readonly Dictionary<SelectExpression, int> _occurrenceCount
-        = new(ExpressionEqualityComparer.Instance);
+        = new(NormalizedSelectExpressionComparer.Instance);
 
     private readonly Dictionary<SelectExpression, CteTableExpression> _cteMap
-        = new(ExpressionEqualityComparer.Instance);
+        = new(NormalizedSelectExpressionComparer.Instance);
 
     private int _cteCounter;
     private bool _isCounting = true;
