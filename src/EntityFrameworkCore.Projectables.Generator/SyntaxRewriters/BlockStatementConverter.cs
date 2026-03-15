@@ -16,6 +16,11 @@ internal class BlockStatementConverter
     private readonly Dictionary<string, ExpressionSyntax> _localVariables = new();
     private readonly Dictionary<string, int> _localVariableReferenceCount = new();
 
+    // Pre-computed reference counts for each local variable across the code statements
+    // (statements that are not local declarations). Variables with count > 1 are wrapped
+    // in Variable.Wrap so the SQL generator can hoist them into a CTE.
+    private IReadOnlyDictionary<string, int> _preComputedRefCounts = new Dictionary<string, int>();
+
     public BlockStatementConverter(SourceProductionContext context, ExpressionSyntaxRewriter expressionRewriter)
     {
         _context = context;
@@ -91,7 +96,11 @@ internal class BlockStatementConverter
             return null;
         }
 
-        // Right-to-left fold: build nested expressions so that each statement wraps the
+        // Pre-compute how many times each local variable is referenced in the code
+        // statements (non-declaration statements). Variables with count > 1 will be
+        // wrapped in Variable.Wrap in the generated expression tree so the SQL generator
+        // can identify shared computations and hoist them into a CTE.
+        _preComputedRefCounts = ComputeCodeStatementRefCounts(codeStatements);
         // next as its "fallthrough" branch.  This naturally handles chains like:
         //   if (a) return 1;  if (b) return 2;  return 3;
         //   => a ? 1 : (b ? 2 : 3)
@@ -348,11 +357,34 @@ internal class BlockStatementConverter
     /// <summary>
     /// Replaces references to local variables in the given expression with their initializer expressions.
     /// Also tracks how many times each variable is referenced via <see cref="_localVariableReferenceCount"/>.
-    /// Variables referenced more than once in the final expression are candidates for CTE-based
-    /// deduplication at the SQL generation layer (see <c>CteDeduplicatingRewriter</c>).
+    /// Variables referenced more than once in the final expression are wrapped in
+    /// <c>Variable.Wrap("name", expr)</c> so the SQL generator can hoist them into a CTE.
     /// </summary>
     private ExpressionSyntax ReplaceLocalVariables(ExpressionSyntax expression)
-        => (ExpressionSyntax)new LocalVariableReplacer(_localVariables, _localVariableReferenceCount).Visit(expression);
+        => (ExpressionSyntax)new LocalVariableReplacer(_localVariables, _localVariableReferenceCount, _preComputedRefCounts).Visit(expression);
+
+    /// <summary>
+    /// Counts the number of standalone identifier references to each local variable
+    /// in the given code statements (non-declaration statements).
+    /// </summary>
+    private static IReadOnlyDictionary<string, int> ComputeCodeStatementRefCounts(
+        IReadOnlyList<StatementSyntax> codeStatements)
+    {
+        // We deliberately don't use a set here — we want to count every occurrence,
+        // not just whether the identifier appears at all.
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        foreach (var stmt in codeStatements)
+        {
+            foreach (var identifier in stmt.DescendantNodes().OfType<IdentifierNameSyntax>())
+            {
+                var name = identifier.Identifier.ValueText;
+                counts[name] = counts.TryGetValue(name, out var existing) ? existing + 1 : 1;
+            }
+        }
+
+        return counts;
+    }
 
     private static LiteralExpressionSyntax DefaultLiteral()
         => SyntaxFactory.LiteralExpression(
@@ -455,27 +487,60 @@ internal class BlockStatementConverter
     {
         private readonly Dictionary<string, ExpressionSyntax> _localVariables;
         private readonly Dictionary<string, int> _referenceCount;
+        private readonly IReadOnlyDictionary<string, int> _preComputedRefCounts;
 
         public LocalVariableReplacer(
             Dictionary<string, ExpressionSyntax> localVariables,
-            Dictionary<string, int> referenceCount)
+            Dictionary<string, int> referenceCount,
+            IReadOnlyDictionary<string, int> preComputedRefCounts)
         {
             _localVariables = localVariables;
             _referenceCount = referenceCount;
+            _preComputedRefCounts = preComputedRefCounts;
         }
 
         public override SyntaxNode? VisitIdentifierName(IdentifierNameSyntax node)
         {
             if (_localVariables.TryGetValue(node.Identifier.Text, out var replacement))
             {
-                _referenceCount[node.Identifier.Text] = _referenceCount.TryGetValue(node.Identifier.Text, out var count)
+                var varName = node.Identifier.Text;
+                _referenceCount[varName] = _referenceCount.TryGetValue(varName, out var count)
                     ? count + 1
                     : 1;
-                return SyntaxFactory.ParenthesizedExpression(replacement.WithoutTrivia())
-                    .WithTriviaFrom(node);
+
+                var inner = SyntaxFactory.ParenthesizedExpression(replacement.WithoutTrivia());
+
+                // When the variable is referenced more than once in the code statements,
+                // wrap the substituted expression in Variable.Wrap("name", expr).
+                // This embeds a CTE marker directly into the generated expression tree
+                // so the runtime SQL generator can identify shared sub-computations.
+                if (_preComputedRefCounts.TryGetValue(varName, out var preCount) && preCount > 1)
+                {
+                    return BuildVariableWrapCall(varName, inner).WithTriviaFrom(node);
+                }
+
+                return inner.WithTriviaFrom(node);
             }
 
             return base.VisitIdentifierName(node);
         }
-    }
-}
+
+        /// <summary>
+        /// Builds a <c>global::EntityFrameworkCore.Projectables.Variable.Wrap("name", value)</c>
+        /// invocation expression.
+        /// </summary>
+        private static ExpressionSyntax BuildVariableWrapCall(string name, ExpressionSyntax value)
+            => SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    SyntaxFactory.ParseName("global::EntityFrameworkCore.Projectables.Variable"),
+                    SyntaxFactory.IdentifierName("Wrap")),
+                SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(new[]
+                {
+                    SyntaxFactory.Argument(
+                        SyntaxFactory.LiteralExpression(
+                            SyntaxKind.StringLiteralExpression,
+                            SyntaxFactory.Literal(name))),
+                    SyntaxFactory.Argument(value),
+                })));
+    }}
